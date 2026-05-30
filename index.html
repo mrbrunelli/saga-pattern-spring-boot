@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Saga Pattern · Orquestração no Spring Boot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,900&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+<style>
+  :root{
+    --ink:#0c0d11;
+    --ink-2:#13151c;
+    --ink-3:#1b1e27;
+    --line:rgba(236,230,218,0.10);
+    --line-strong:rgba(236,230,218,0.20);
+    --paper:#ece6da;
+    --muted:#8b909c;
+    --amber:#f0a830;
+    --amber-dim:rgba(240,168,48,0.14);
+    --red:#e5563f;
+    --red-dim:rgba(229,86,63,0.14);
+    --green:#4fb37d;
+    --green-dim:rgba(79,179,125,0.14);
+    --blue:#6c93f0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--ink);
+    color:var(--paper);
+    font-family:'Hanken Grotesk',sans-serif;
+    line-height:1.6;
+    font-size:17px;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+    position:relative;
+  }
+  /* blueprint grid + grain atmosphere */
+  body::before{
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    background-image:
+      linear-gradient(var(--line) 1px,transparent 1px),
+      linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:44px 44px;
+    -webkit-mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 30%,transparent 100%);
+            mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 30%,transparent 100%);
+    opacity:.5;
+  }
+  body::after{
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.035;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .wrap{position:relative;z-index:1;max-width:1000px;margin:0 auto;padding:0 28px}
+
+  /* ---------- HERO ---------- */
+  header{padding:96px 0 64px;position:relative}
+  .tag{
+    font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.28em;
+    text-transform:uppercase;color:var(--amber);display:inline-flex;align-items:center;gap:10px;
+    margin-bottom:28px;
+  }
+  .tag::before{content:"";width:34px;height:1px;background:var(--amber)}
+  h1{
+    font-family:'Fraunces',serif;font-weight:900;font-size:clamp(2.7rem,7vw,5.2rem);
+    line-height:.98;letter-spacing:-.02em;margin-bottom:24px;
+  }
+  h1 em{font-style:italic;color:var(--amber);font-weight:500}
+  .lede{font-size:clamp(1.05rem,2.2vw,1.3rem);color:var(--muted);max-width:60ch}
+  .lede strong{color:var(--paper);font-weight:600}
+  .meta{
+    margin-top:40px;display:flex;flex-wrap:wrap;gap:10px;
+    font-family:'IBM Plex Mono',monospace;font-size:.78rem;
+  }
+  .chip{border:1px solid var(--line-strong);border-radius:999px;padding:6px 14px;color:var(--muted)}
+  .chip b{color:var(--paper);font-weight:500}
+
+  /* ---------- SECTIONS ---------- */
+  section{padding:60px 0;border-top:1px solid var(--line)}
+  .skip{font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.24em;
+    text-transform:uppercase;color:var(--amber);margin-bottom:18px;display:block}
+  h2{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(1.8rem,4vw,2.7rem);
+    letter-spacing:-.01em;margin-bottom:22px;line-height:1.05}
+  h3{font-family:'Fraunces',serif;font-weight:600;font-size:1.4rem;margin:36px 0 14px}
+  p{margin-bottom:18px;max-width:68ch}
+  p .hl{color:var(--amber);font-weight:600}
+  p code,li code{font-family:'IBM Plex Mono',monospace;font-size:.86em;
+    background:var(--ink-3);padding:2px 7px;border-radius:6px;color:#f3cd8c;border:1px solid var(--line)}
+  ul{margin:0 0 18px 0;padding-left:0;list-style:none;max-width:68ch}
+  ul li{position:relative;padding-left:30px;margin-bottom:14px}
+  ul li::before{content:"";position:absolute;left:4px;top:11px;width:8px;height:8px;
+    background:var(--amber);transform:rotate(45deg)}
+
+  /* ---------- COMPARE CARDS ---------- */
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:10px}
+  .card{background:var(--ink-2);border:1px solid var(--line);border-radius:14px;padding:26px 24px;position:relative}
+  .card.pick{border-color:rgba(240,168,48,.4);box-shadow:0 0 0 1px rgba(240,168,48,.15),0 24px 50px -30px rgba(240,168,48,.4)}
+  .card h4{font-family:'IBM Plex Mono',monospace;font-size:.78rem;letter-spacing:.18em;
+    text-transform:uppercase;margin-bottom:8px;color:var(--muted)}
+  .card .big{font-family:'Fraunces',serif;font-size:1.5rem;font-weight:600;margin-bottom:14px}
+  .card.pick .big{color:var(--amber)}
+  .card p{font-size:.95rem;color:var(--muted);margin:0}
+  .card .stamp{position:absolute;top:22px;right:22px;font-family:'IBM Plex Mono',monospace;
+    font-size:.66rem;letter-spacing:.15em;color:var(--amber);border:1px solid rgba(240,168,48,.4);
+    padding:3px 9px;border-radius:999px}
+
+  /* ---------- SIMULATOR ---------- */
+  .sim{background:linear-gradient(180deg,var(--ink-2),var(--ink));border:1px solid var(--line-strong);
+    border-radius:18px;padding:30px;margin-top:18px;overflow:hidden}
+  .sim-ctrl{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:30px}
+  .btn{font-family:'IBM Plex Mono',monospace;font-size:.82rem;letter-spacing:.04em;cursor:pointer;
+    border-radius:10px;padding:13px 20px;border:1px solid var(--line-strong);background:var(--ink-3);
+    color:var(--paper);transition:.18s;font-weight:500}
+  .btn:hover{border-color:var(--line-strong);transform:translateY(-1px)}
+  .btn.ok{border-color:rgba(79,179,125,.45);color:#bdf0d4}
+  .btn.ok:hover{background:var(--green-dim)}
+  .btn.fail{border-color:rgba(229,86,63,.45);color:#f5c0b5}
+  .btn.fail:hover{background:var(--red-dim)}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+  .ctrl-hint{font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:var(--muted)}
+
+  .orch{display:flex;justify-content:center;margin-bottom:8px}
+  .orch-node{font-family:'IBM Plex Mono',monospace;font-size:.74rem;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--amber);border:1px dashed rgba(240,168,48,.5);
+    padding:8px 18px;border-radius:10px;background:var(--amber-dim)}
+  .orch-stem{width:1px;height:26px;background:var(--line-strong);margin:0 auto}
+
+  .flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:6px}
+  .arrow{font-family:'IBM Plex Mono',monospace;color:var(--muted);font-size:1.1rem;text-align:center;
+    transition:.3s}
+  .arrow.back{color:var(--red);transform:scaleX(-1)}
+  .node{background:var(--ink-3);border:1px solid var(--line);border-radius:13px;padding:18px 16px;
+    text-align:center;transition:.35s;position:relative}
+  .node .ix{font-family:'IBM Plex Mono',monospace;font-size:.66rem;color:var(--muted);letter-spacing:.1em}
+  .node .nm{font-weight:600;font-size:.98rem;margin:7px 0 4px}
+  .node .st{font-family:'IBM Plex Mono',monospace;font-size:.68rem;letter-spacing:.06em;
+    color:var(--muted);text-transform:uppercase}
+  .node[data-s="running"]{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber),0 0 34px -6px rgba(240,168,48,.55);animation:pulse 1s infinite}
+  .node[data-s="running"] .st{color:var(--amber)}
+  .node[data-s="done"]{border-color:rgba(79,179,125,.55);background:linear-gradient(180deg,var(--green-dim),var(--ink-3))}
+  .node[data-s="done"] .st{color:var(--green)}
+  .node[data-s="failed"]{border-color:var(--red);background:linear-gradient(180deg,var(--red-dim),var(--ink-3));animation:shake .4s}
+  .node[data-s="failed"] .st{color:var(--red)}
+  .node[data-s="compensating"]{border-color:var(--red);box-shadow:0 0 0 1px var(--red),0 0 30px -8px rgba(229,86,63,.5);animation:pulse 1s infinite}
+  .node[data-s="compensating"] .st{color:var(--red)}
+  .node[data-s="compensated"]{border-style:dashed;border-color:rgba(229,86,63,.45);opacity:.62}
+  .node[data-s="compensated"] .nm{text-decoration:line-through;text-decoration-color:var(--red)}
+  .node[data-s="compensated"] .st{color:var(--red)}
+  @keyframes pulse{50%{box-shadow:0 0 0 1px currentColor,0 0 16px -10px}}
+  @keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+  .banner{margin-top:22px;text-align:center;font-family:'IBM Plex Mono',monospace;
+    font-size:.82rem;letter-spacing:.16em;text-transform:uppercase;padding:12px;border-radius:10px;
+    border:1px solid var(--line);color:var(--muted);min-height:44px;display:flex;align-items:center;
+    justify-content:center;transition:.4s}
+  .banner.completed{border-color:rgba(79,179,125,.5);color:var(--green);background:var(--green-dim)}
+  .banner.cancelled{border-color:rgba(229,86,63,.5);color:var(--red);background:var(--red-dim)}
+
+  .console{margin-top:22px;background:#08090c;border:1px solid var(--line);border-radius:12px;
+    padding:0;overflow:hidden}
+  .console-bar{display:flex;align-items:center;gap:7px;padding:11px 16px;border-bottom:1px solid var(--line)}
+  .dot{width:11px;height:11px;border-radius:50%}
+  .console-bar span{font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:var(--muted);margin-left:8px}
+  .log{font-family:'IBM Plex Mono',monospace;font-size:.8rem;line-height:1.85;padding:16px 18px;
+    min-height:150px;max-height:260px;overflow-y:auto}
+  .log .ln{opacity:0;transform:translateX(-6px);animation:slidein .25s forwards}
+  @keyframes slidein{to{opacity:1;transform:none}}
+  .log .t{color:#565c69}
+  .log .sys{color:var(--amber)}
+  .log .run{color:var(--paper)}
+  .log .ok{color:var(--green)}
+  .log .err{color:var(--red)}
+  .log .comp{color:#f0997f}
+  .log .idle{color:var(--muted)}
+
+  /* ---------- CODE ---------- */
+  pre[class*="language-"]{border-radius:13px;border:1px solid var(--line);font-size:.82rem;
+    margin:6px 0 8px;background:#08090c!important;padding:22px!important}
+  code[class*="language-"]{font-family:'IBM Plex Mono',monospace!important;text-shadow:none!important}
+  .token.comment{color:#5a6070!important;font-style:italic}
+  .token.keyword{color:var(--amber)!important}
+  .token.string{color:#9ed0aa!important}
+  .token.function{color:var(--blue)!important}
+  .token.class-name{color:#f3cd8c!important}
+  .token.annotation,.token.builtin{color:#e09b6a!important}
+  .codecap{font-family:'IBM Plex Mono',monospace;font-size:.74rem;color:var(--muted);
+    letter-spacing:.05em;margin-bottom:2px}
+
+  /* ---------- CHECKLIST ---------- */
+  .checks{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:14px}
+  .check{background:var(--ink-2);border:1px solid var(--line);border-radius:13px;padding:22px}
+  .check .n{font-family:'IBM Plex Mono',monospace;color:var(--amber);font-size:.8rem;margin-bottom:9px}
+  .check h4{font-family:'Fraunces',serif;font-size:1.18rem;font-weight:600;margin-bottom:7px}
+  .check p{font-size:.9rem;color:var(--muted);margin:0;max-width:none}
+
+  footer{padding:60px 0 80px;border-top:1px solid var(--line);color:var(--muted);
+    font-family:'IBM Plex Mono',monospace;font-size:.78rem}
+  footer .big{font-family:'Fraunces',serif;font-size:1.6rem;color:var(--paper);margin-bottom:14px;font-weight:500}
+
+  .reveal{opacity:0;transform:translateY(22px);transition:opacity .7s cubic-bezier(.2,.7,.3,1),transform .7s cubic-bezier(.2,.7,.3,1)}
+  .reveal.in{opacity:1;transform:none}
+
+  @media(max-width:720px){
+    body{font-size:16px}
+    .compare,.checks{grid-template-columns:1fr}
+    .flow{grid-template-columns:1fr;gap:4px}
+    .arrow{transform:rotate(90deg)}
+    .arrow.back{transform:rotate(90deg) scaleX(-1)}
+    .wrap{padding:0 20px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <span class="tag">Padrão de Transações Distribuídas</span>
+    <h1>Saga Pattern<br><em>orquestração</em> no Spring&nbsp;Boot</h1>
+    <p class="lede">Como manter consistência quando uma operação de negócio atravessa <strong>vários serviços</strong> que não compartilham a mesma transação ACID — e como desfazer tudo, em ordem, quando algo dá errado.</p>
+    <div class="meta">
+      <span class="chip"><b>Stack</b> · Kotlin + Spring Boot</span>
+      <span class="chip"><b>Caso</b> · processamento de pedido</span>
+      <span class="chip"><b>Estilo</b> · orquestração (maestro central)</span>
+    </div>
+  </header>
+
+  <section class="reveal">
+    <span class="skip">01 — O problema</span>
+    <h2>Por que uma transação só não resolve</h2>
+    <p>Imagine finalizar um pedido de e-commerce. São quatro efeitos que precisam acontecer juntos: <span class="hl">criar o pedido</span>, <span class="hl">cobrar o pagamento</span>, <span class="hl">reservar o estoque</span> e <span class="hl">agendar o envio</span>. O detalhe é que esses efeitos vivem em contextos diferentes — bancos separados, às vezes microsserviços distintos. Não existe um <code>@Transactional</code> que envolva todos eles de uma vez.</p>
+    <p>O cenário perigoso: você <strong>já cobrou</strong> o cliente e, no passo seguinte, descobre que o estoque acabou. Sem um mecanismo de rollback, o dinheiro saiu e o produto não existe. A Saga resolve isso dando a cada passo um par: uma <span class="hl">ação</span> e uma <span class="hl">compensação</span> (a operação inversa). Falhou no meio? Roda as compensações dos passos já concluídos, na ordem inversa.</p>
+  </section>
+
+  <section class="reveal">
+    <span class="skip">02 — Duas abordagens</span>
+    <h2>Orquestração vs. coreografia</h2>
+    <p>A Saga tem dois sabores. Aqui o foco é a <span class="hl">orquestração</span>, pela clareza do fluxo e pela facilidade de raciocinar sobre o rollback.</p>
+    <div class="compare">
+      <div class="card pick">
+        <span class="stamp">foco aqui</span>
+        <h4>Orquestração</h4>
+        <div class="big">Um maestro central</div>
+        <p>Um componente decide a ordem dos passos e dispara as compensações. Fluxo explícito, fácil de debugar e de visualizar. Ideal quando há lógica de rollback de verdade.</p>
+      </div>
+      <div class="card">
+        <h4>Coreografia</h4>
+        <div class="big">Cada um reage</div>
+        <p>Sem maestro: cada serviço escuta eventos e reage publicando os seus. Mais desacoplado, porém o fluxo fica espalhado — difícil de seguir e de depurar conforme cresce.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <span class="skip">03 — Veja acontecer</span>
+    <h2>Simulador da saga de pedido</h2>
+    <p>Rode os dois cenários. No caminho de falha, o estoque é insuficiente: observe o orquestrador <span class="hl">estornar o pagamento</span> automaticamente, percorrendo os passos concluídos na ordem inversa.</p>
+
+    <div class="sim">
+      <div class="sim-ctrl">
+        <button class="btn ok" id="run-ok">▶ Cenário feliz · qty&nbsp;3</button>
+        <button class="btn fail" id="run-fail">▶ Estoque insuficiente · qty&nbsp;10</button>
+        <button class="btn" id="reset">↺ Limpar</button>
+        <span class="ctrl-hint" id="hint">pronto.</span>
+      </div>
+
+      <div class="orch"><div class="orch-node">Saga Orchestrator</div></div>
+      <div class="orch-stem"></div>
+
+      <div class="flow">
+        <div class="node" data-s="idle" id="n0">
+          <div class="ix">STEP 01</div><div class="nm">Pagamento</div><div class="st">idle</div>
+        </div>
+        <div class="arrow" id="a0">→</div>
+        <div class="node" data-s="idle" id="n1">
+          <div class="ix">STEP 02</div><div class="nm">Estoque</div><div class="st">idle</div>
+        </div>
+        <div class="arrow" id="a1">→</div>
+        <div class="node" data-s="idle" id="n2">
+          <div class="ix">STEP 03</div><div class="nm">Envio</div><div class="st">idle</div>
+        </div>
+      </div>
+
+      <div class="banner" id="banner">aguardando início · status do pedido: PENDING</div>
+
+      <div class="console">
+        <div class="console-bar">
+          <i class="dot" style="background:#e5563f"></i>
+          <i class="dot" style="background:#f0a830"></i>
+          <i class="dot" style="background:#4fb37d"></i>
+          <span>orchestrator.log</span>
+        </div>
+        <div class="log" id="log"><div class="ln idle">$ saga pronta para execução…</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <span class="skip">04 — Anatomia</span>
+    <h2>O contrato e o maestro</h2>
+    <p>Todo passo conhece duas coisas: como se <span class="hl">executar</span> e como se <span class="hl">compensar</span>. Esse contrato simples é o que torna o orquestrador genérico.</p>
+    <div class="codecap">// SagaStep.kt — o contrato</div>
+    <pre><code class="language-kotlin">interface SagaStep&lt;C&gt; {
+    val name: String
+    fun execute(context: C)
+    fun compensate(context: C)   // operação inversa, idempotente
+}</code></pre>
+
+    <p>O orquestrador empilha cada passo bem-sucedido. Se um <code>execute()</code> lança exceção, ele desempilha e compensa na ordem inversa (LIFO) — exatamente como na simulação acima.</p>
+    <div class="codecap">// SagaOrchestrator.kt — o maestro</div>
+    <pre><code class="language-kotlin">@Component
+class SagaOrchestrator {
+    fun &lt;C&gt; run(context: C, steps: List&lt;SagaStep&lt;C&gt;&gt;) {
+        val executed = ArrayDeque&lt;SagaStep&lt;C&gt;&gt;()
+        try {
+            for (step in steps) {
+                step.execute(context)
+                executed.addLast(step)        // só empilha se teve sucesso
+            }
+        } catch (ex: Exception) {
+            while (executed.isNotEmpty()) {    // compensa em ordem inversa
+                val step = executed.removeLast()
+                runCatching { step.compensate(context) }
+                    .onFailure { /* alerta + revisão manual */ }
+            }
+            throw SagaExecutionException("Saga abortada e compensada", ex)
+        }
+    }
+}</code></pre>
+
+    <p>Cada passo concreto adapta um serviço participante. Repare como o <code>execute</code> grava o ID gerado no contexto e o <code>compensate</code> o lê — assim a compensação só desfaz o que de fato aconteceu.</p>
+    <div class="codecap">// PaymentStep.kt — um passo concreto</div>
+    <pre><code class="language-kotlin">@Component
+class PaymentStep(private val payments: PaymentService) : SagaStep&lt;OrderSagaContext&gt; {
+    override val name = "PROCESSAR_PAGAMENTO"
+
+    override fun execute(context: OrderSagaContext) {
+        context.paymentId = payments.charge(context.customerId, context.amount)
+    }
+
+    override fun compensate(context: OrderSagaContext) {
+        context.paymentId?.let { payments.refund(it) }   // estorno idempotente
+    }
+}</code></pre>
+  </section>
+
+  <section class="reveal">
+    <span class="skip">05 — Próximo nível</span>
+    <h2>Evoluindo para eventos assíncronos</h2>
+    <p>A versão acima é síncrona — perfeita para entender o padrão e escrever testes. A orquestração de eventos "de produção" costuma ser assíncrona, e é aí que entra a mensageria (SQS, por exemplo).</p>
+    <p>O orquestrador deixa de chamar métodos direto e passa a <span class="hl">publicar comandos</span> em filas por serviço (<code>payment-commands</code>, <code>inventory-commands</code>), enquanto escuta uma fila de respostas. A mudança crítica: o <span class="hl">estado da saga vira persistente</span> — você grava numa tabela qual passo está pendente, qual concluiu, qual compensou. Assim a saga sobrevive a um restart de pod no meio do fluxo, em vez de deixar o pedido num limbo.</p>
+  </section>
+
+  <section class="reveal">
+    <span class="skip">06 — Checklist de produção</span>
+    <h2>O que separa o exemplo do real</h2>
+    <div class="checks">
+      <div class="check"><div class="n">▪ 01</div><h4>Idempotência</h4><p>A mesma mensagem pode chegar duas vezes na fila. Cada handler — e cada compensação — precisa detectar reprocessamento e não duplicar o efeito.</p></div>
+      <div class="check"><div class="n">▪ 02</div><h4>Estado persistente</h4><p>Grave o progresso da saga em banco (com auditing de createdAt/updatedAt). Sem isso, um deploy no meio do fluxo perde o rastro do que falta compensar.</p></div>
+      <div class="check"><div class="n">▪ 03</div><h4>DLQ + backoff</h4><p>Distinga falha transitória (retry com backoff exponencial) de falha de negócio como "estoque insuficiente" (dispara compensação, sem retry).</p></div>
+      <div class="check"><div class="n">▪ 04</div><h4>Compensação que falha</h4><p>É o pior caso: não pode bloquear as demais. Registre, alerte e mande para revisão manual — nunca relance interrompendo o rollback.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="big">Roteiro de prática</div>
+    <p>① Rode o exemplo síncrono &nbsp;→&nbsp; ② Escreva um teste verificando que <code style="background:var(--ink-3);padding:1px 6px;border-radius:5px">refund</code> é chamado quando o estoque falha &nbsp;→&nbsp; ③ Quebre em filas SQS adicionando a entidade JPA de estado.</p>
+    <p style="margin-top:18px;color:#565c69">Documentação gerada para estudo · Saga Pattern · Spring Boot</p>
+  </footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-clike.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-kotlin.min.js"></script>
+<script>
+  // ---- reveal on scroll ----
+  const io = new IntersectionObserver((es)=>{
+    es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+  },{threshold:.12});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+  // ---- simulator ----
+  const rid = () => Math.random().toString(16).slice(2,8).toUpperCase();
+  const sleep = ms => new Promise(r=>setTimeout(r,ms));
+  const orderId = rid();
+
+  const steps = [
+    { node:'n0', okLog:()=>`💳 Cobranca de R$ 249,90 confirmada · paymentId=${rid()}`,
+      compLog:()=>`💰 Estornando pagamento · refund OK`, failLog:null },
+    { node:'n1', okLog:()=>`📦 Reserva criada · reservationId=${rid()}`,
+      compLog:()=>`📤 Liberando reserva de estoque`,
+      failLog:()=>`✖ Estoque insuficiente para o produto solicitado` },
+    { node:'n2', okLog:()=>`🚚 Envio agendado · shipmentId=${rid()}`,
+      compLog:()=>`🚫 Cancelando envio agendado`, failLog:null },
+  ];
+
+  const logEl = document.getElementById('log');
+  const banner = document.getElementById('banner');
+  const hint = document.getElementById('hint');
+  const btnOk = document.getElementById('run-ok');
+  const btnFail = document.getElementById('run-fail');
+  const btnReset = document.getElementById('reset');
+  let running = false;
+
+  function setState(i,s){ document.getElementById(steps[i].node).dataset.s = s;
+    document.querySelector(`#${steps[i].node} .st`).textContent = s; }
+  function arrowBack(i,on){ const a=document.getElementById('a'+i); if(a) a.classList.toggle('back',on); }
+
+  function log(cls,txt){
+    const now = new Date().toLocaleTimeString('pt-BR',{hour12:false});
+    const div=document.createElement('div');
+    div.className='ln';
+    div.innerHTML=`<span class="t">${now}</span> <span class="${cls}">${txt}</span>`;
+    logEl.appendChild(div); logEl.scrollTop=logEl.scrollHeight;
+  }
+
+  function reset(full=true){
+    steps.forEach((_,i)=>{ setState(i,'idle'); arrowBack(i,false); });
+    banner.className='banner';
+    banner.textContent='aguardando início · status do pedido: PENDING';
+    if(full){ logEl.innerHTML='<div class="ln idle">$ saga pronta para execução…</div>'; hint.textContent='pronto.'; }
+  }
+
+  async function runSaga(scenario){
+    if(running) return;
+    running=true; btnOk.disabled=btnFail.disabled=true; hint.textContent='executando…';
+    reset(false); logEl.innerHTML='';
+    const failAt = scenario==='fail' ? 1 : -1;
+    log('sys',`➡️  Saga iniciada · pedido #${orderId} · status PENDING`);
+    await sleep(500);
+
+    const executed=[];
+    let failed=false;
+    for(let i=0;i<steps.length;i++){
+      setState(i,'running');
+      log('run',`executando STEP 0${i+1} · ${steps[i].node==='n0'?'PaymentStep':steps[i].node==='n1'?'InventoryStep':'ShippingStep'}.execute()`);
+      await sleep(950);
+      if(i===failAt){
+        setState(i,'failed');
+        log('err',steps[i].failLog());
+        failed=true; break;
+      }
+      setState(i,'done');
+      log('ok',steps[i].okLog());
+      executed.push(i);
+      await sleep(250);
+    }
+
+    if(failed){
+      await sleep(500);
+      log('sys','❌ Falha detectada · iniciando compensação em ordem inversa (LIFO)');
+      await sleep(600);
+      for(let k=executed.length-1;k>=0;k--){
+        const idx=executed[k];
+        arrowBack(idx,true);
+        setState(idx,'compensating');
+        log('comp',steps[idx].compLog());
+        await sleep(950);
+        setState(idx,'compensated');
+      }
+      banner.className='banner cancelled';
+      banner.textContent='↩ saga compensada · status do pedido: CANCELLED';
+      log('sys','↩️  Saga abortada e compensada. Pedido marcado como CANCELLED.');
+      hint.textContent='compensado.';
+    } else {
+      banner.className='banner completed';
+      banner.textContent='✓ saga concluída · status do pedido: COMPLETED';
+      log('sys','✅ Saga concluída com sucesso. Pedido marcado como COMPLETED.');
+      hint.textContent='concluído.';
+    }
+    running=false; btnOk.disabled=btnFail.disabled=false;
+  }
+
+  btnOk.addEventListener('click',()=>runSaga('ok'));
+  btnFail.addEventListener('click',()=>runSaga('fail'));
+  btnReset.addEventListener('click',()=>{ if(!running) reset(true); });
+</script>
+</body>
+</html>
