@@ -54,6 +54,44 @@
   }
   .wrap{position:relative;z-index:1;max-width:1000px;margin:0 auto;padding:0 28px}
 
+  /* ---------- SIDE NAV (docs-style fixed sidebar) ---------- */
+  .sidenav{
+    position:fixed;top:0;left:0;height:100vh;width:264px;z-index:20;
+    padding:38px 22px 32px;overflow-y:auto;
+    border-right:1px solid var(--line);
+    background:rgba(10,11,15,.88);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  }
+  .sidenav .nav-brand{
+    font-family:'Fraunces',serif;font-weight:600;font-size:1.02rem;color:var(--paper);
+    line-height:1.2;margin-bottom:4px;
+  }
+  .sidenav .nav-brand em{font-style:italic;color:var(--amber);font-weight:500}
+  .sidenav .nav-title{
+    font-family:'IBM Plex Mono',monospace;font-size:.6rem;letter-spacing:.24em;
+    text-transform:uppercase;color:var(--muted);margin:24px 0 12px;display:block;
+  }
+  .sidenav ul{list-style:none;margin:0;padding:0;max-width:none}
+  .sidenav li{margin:0;padding:0}
+  .sidenav li::before{display:none}
+  .sidenav a{
+    display:flex;align-items:baseline;gap:10px;text-decoration:none;color:var(--muted);
+    font-family:'Hanken Grotesk',sans-serif;font-size:.86rem;line-height:1.35;
+    padding:8px 12px;border-radius:8px;border-left:2px solid transparent;transition:.2s;
+  }
+  .sidenav a .num{
+    font-family:'IBM Plex Mono',monospace;font-size:.68rem;color:#565c69;flex-shrink:0;
+    transition:.2s;
+  }
+  .sidenav a:hover{color:var(--paper);background:rgba(236,230,218,.04)}
+  .sidenav a.active{
+    color:var(--amber);background:var(--amber-dim);border-left-color:var(--amber);font-weight:600;
+  }
+  .sidenav a.active .num{color:var(--amber)}
+  /* reserve a column for the sidebar so content never sits under it */
+  @media(min-width:1100px){ body{padding-left:264px} }
+  @media(max-width:1099px){ .sidenav{display:none} }
+
   /* ---------- HERO ---------- */
   header{padding:96px 0 64px;position:relative}
   .tag{
@@ -230,6 +268,21 @@
 </style>
 </head>
 <body>
+
+<nav class="sidenav" id="sidenav" aria-label="Índice da página">
+  <div class="nav-brand">Saga Pattern<br><em>Spring Boot</em></div>
+  <span class="nav-title">Nesta página</span>
+  <ul>
+    <li><a href="#sec-problema"><span class="num">01</span>O problema</a></li>
+    <li><a href="#sec-abordagens"><span class="num">02</span>Duas abordagens</a></li>
+    <li><a href="#sec-simulador"><span class="num">03</span>Simulador orquestrado</a></li>
+    <li><a href="#sec-anatomia"><span class="num">04</span>Anatomia do maestro</a></li>
+    <li><a href="#sec-async"><span class="num">05</span>Eventos assíncronos</a></li>
+    <li><a href="#sec-coreografia"><span class="num">06</span>Coreografia</a></li>
+    <li><a href="#sec-checklist"><span class="num">07</span>Checklist</a></li>
+  </ul>
+</nav>
+
 <div class="wrap">
 
   <header>
@@ -243,14 +296,14 @@
     </div>
   </header>
 
-  <section class="reveal">
+  <section class="reveal" id="sec-problema">
     <span class="skip">01 — O problema</span>
     <h2>Por que uma transação só não resolve</h2>
     <p>Imagine finalizar um pedido de e-commerce. São quatro efeitos que precisam acontecer juntos: <span class="hl">criar o pedido</span>, <span class="hl">cobrar o pagamento</span>, <span class="hl">reservar o estoque</span> e <span class="hl">agendar o envio</span>. O detalhe é que esses efeitos vivem em contextos diferentes — bancos separados, às vezes microsserviços distintos. Não existe um <code>@Transactional</code> que envolva todos eles de uma vez.</p>
     <p>O cenário perigoso: você <strong>já cobrou</strong> o cliente e, no passo seguinte, descobre que o estoque acabou. Sem um mecanismo de rollback, o dinheiro saiu e o produto não existe. A Saga resolve isso dando a cada passo um par: uma <span class="hl">ação</span> e uma <span class="hl">compensação</span> (a operação inversa). Falhou no meio? Roda as compensações dos passos já concluídos, na ordem inversa.</p>
   </section>
 
-  <section class="reveal">
+  <section class="reveal" id="sec-abordagens">
     <span class="skip">02 — Duas abordagens</span>
     <h2>Orquestração vs. coreografia</h2>
     <p>A Saga tem dois sabores. Aqui o foco é a <span class="hl">orquestração</span>, pela clareza do fluxo e pela facilidade de raciocinar sobre o rollback.</p>
@@ -269,7 +322,7 @@
     </div>
   </section>
 
-  <section class="reveal">
+  <section class="reveal" id="sec-simulador">
     <span class="skip">03 — Veja acontecer</span>
     <h2>Simulador da saga de pedido</h2>
     <p>Rode os dois cenários. No caminho de falha, o estoque é insuficiente: observe o orquestrador <span class="hl">estornar o pagamento</span> automaticamente, percorrendo os passos concluídos na ordem inversa.</p>
@@ -313,7 +366,7 @@
     </div>
   </section>
 
-  <section class="reveal">
+  <section class="reveal" id="sec-anatomia">
     <span class="skip">04 — Anatomia</span>
     <h2>O contrato e o maestro</h2>
     <p>Todo passo conhece duas coisas: como se <span class="hl">executar</span> e como se <span class="hl">compensar</span>. Esse contrato simples é o que torna o orquestrador genérico.</p>
@@ -362,14 +415,14 @@ class PaymentStep(private val payments: PaymentService) : SagaStep&lt;OrderSagaC
 }</code></pre>
   </section>
 
-  <section class="reveal">
+  <section class="reveal" id="sec-async">
     <span class="skip">05 — Próximo nível</span>
     <h2>Evoluindo para eventos assíncronos</h2>
     <p>A versão acima é síncrona — perfeita para entender o padrão e escrever testes. A orquestração de eventos "de produção" costuma ser assíncrona, e é aí que entra a mensageria (SQS, por exemplo).</p>
     <p>O orquestrador deixa de chamar métodos direto e passa a <span class="hl">publicar comandos</span> em filas por serviço (<code>payment-commands</code>, <code>inventory-commands</code>), enquanto escuta uma fila de respostas. A mudança crítica: o <span class="hl">estado da saga vira persistente</span> — você grava numa tabela qual passo está pendente, qual concluiu, qual compensou. Assim a saga sobrevive a um restart de pod no meio do fluxo, em vez de deixar o pedido num limbo.</p>
   </section>
 
-  <section class="reveal">
+  <section class="reveal" id="sec-coreografia">
     <span class="skip">06 — Coreografia na prática</span>
     <h2>Cada serviço reage aos seus eventos</h2>
     <p>Na coreografia não há maestro. O <code>OrderService</code> dispara um <code>OrderCreatedEvent</code> e o fluxo segue por reação em cadeia: cada serviço escuta os eventos que lhe interessam e publica o próximo quando conclui — ou um <span class="hl">evento de falha</span> quando não consegue. A compensação também é orientada a eventos: quando o estoque falha, ele publica <code>StockReservationFailedEvent</code> e o serviço de pagamento ouve e estorna sozinho.</p>
@@ -467,7 +520,7 @@ class InventoryEventHandler(
 }</code></pre>
   </section>
 
-  <section class="reveal">
+  <section class="reveal" id="sec-checklist">
     <span class="skip">07 — Checklist de produção</span>
     <h2>O que separa o exemplo do real</h2>
     <div class="checks">
@@ -495,6 +548,32 @@ class InventoryEventHandler(
     es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
   },{threshold:.12});
   document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+  // ---- side nav: highlight current section ----
+  const navLinks = Array.from(document.querySelectorAll('.sidenav a'));
+  const navMap = new Map(navLinks.map(a => [a.getAttribute('href').slice(1), a]));
+  const navSections = navLinks
+    .map(a => document.getElementById(a.getAttribute('href').slice(1)))
+    .filter(Boolean);
+
+  function setActiveNav(id){
+    navLinks.forEach(a => a.classList.remove('active'));
+    const a = navMap.get(id);
+    if(a) a.classList.add('active');
+  }
+
+  const navIo = new IntersectionObserver((entries)=>{
+    // pick the section whose top is closest to the viewport top among those intersecting
+    const visible = entries.filter(e => e.isIntersecting);
+    if(visible.length){
+      visible.sort((x,y)=>x.boundingClientRect.top - y.boundingClientRect.top);
+      setActiveNav(visible[0].target.id);
+    }
+  },{rootMargin:'-45% 0px -45% 0px',threshold:0});
+  navSections.forEach(s => navIo.observe(s));
+
+  // smooth-scroll + immediate highlight on click
+  navLinks.forEach(a => a.addEventListener('click', () => setActiveNav(a.getAttribute('href').slice(1))));
 
   // ---- simulator ----
   const rid = () => Math.random().toString(16).slice(2,8).toUpperCase();
