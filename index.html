@@ -201,6 +201,24 @@
   .reveal{opacity:0;transform:translateY(22px);transition:opacity .7s cubic-bezier(.2,.7,.3,1),transform .7s cubic-bezier(.2,.7,.3,1)}
   .reveal.in{opacity:1;transform:none}
 
+  /* ---------- CHOREOGRAPHY ---------- */
+  .bus{text-align:center;margin-bottom:18px}
+  .bus-tag{font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--blue);border:1px solid rgba(108,147,240,.35);
+    padding:5px 16px;border-radius:999px;background:rgba(108,147,240,.07)}
+  .flow4{display:grid;grid-template-columns:1fr auto 1fr auto 1fr auto 1fr;align-items:center;gap:6px}
+  .evt-col{display:flex;flex-direction:column;align-items:center;gap:3px}
+  .evt-label{font-family:'IBM Plex Mono',monospace;font-size:.6rem;letter-spacing:.05em;
+    color:var(--muted);text-align:center;white-space:nowrap;transition:.35s;padding:2px 6px;
+    border-radius:5px;border:1px solid transparent}
+  .evt-label.active{color:var(--blue);border-color:rgba(108,147,240,.4);background:rgba(108,147,240,.1)}
+  .evt-label.fail{color:var(--red);border-color:rgba(229,86,63,.4);background:var(--red-dim)}
+  .evt-label.comp-ev{color:#f0997f;border-color:rgba(240,153,127,.4);background:rgba(240,153,127,.08)}
+  @media(max-width:720px){
+    .flow4{grid-template-columns:1fr;gap:4px}
+    .evt-col{flex-direction:row;gap:6px}
+  }
+
   @media(max-width:720px){
     body{font-size:16px}
     .compare,.checks{grid-template-columns:1fr}
@@ -352,7 +370,105 @@ class PaymentStep(private val payments: PaymentService) : SagaStep&lt;OrderSagaC
   </section>
 
   <section class="reveal">
-    <span class="skip">06 — Checklist de produção</span>
+    <span class="skip">06 — Coreografia na prática</span>
+    <h2>Cada serviço reage aos seus eventos</h2>
+    <p>Na coreografia não há maestro. O <code>OrderService</code> dispara um <code>OrderCreatedEvent</code> e o fluxo segue por reação em cadeia: cada serviço escuta os eventos que lhe interessam e publica o próximo quando conclui — ou um <span class="hl">evento de falha</span> quando não consegue. A compensação também é orientada a eventos: quando o estoque falha, ele publica <code>StockReservationFailedEvent</code> e o serviço de pagamento ouve e estorna sozinho.</p>
+
+    <!-- ---- simulator ---- -->
+    <div class="sim">
+      <div class="sim-ctrl">
+        <button class="btn ok" id="cho-ok">▶ Cenário feliz · qty&nbsp;3</button>
+        <button class="btn fail" id="cho-fail">▶ Estoque insuficiente · qty&nbsp;10</button>
+        <button class="btn" id="cho-reset">↺ Limpar</button>
+        <span class="ctrl-hint" id="cho-hint">pronto.</span>
+      </div>
+
+      <div class="bus"><span class="bus-tag">◈ Event Bus</span></div>
+
+      <div class="flow4">
+        <div class="node" data-s="idle" id="cn0">
+          <div class="ix">SERVICE 01</div><div class="nm">Pedido</div><div class="st">idle</div>
+        </div>
+        <div class="evt-col">
+          <span class="evt-label" id="ce0">OrderCreated</span>
+          <span class="arrow" id="ca0">→</span>
+        </div>
+        <div class="node" data-s="idle" id="cn1">
+          <div class="ix">SERVICE 02</div><div class="nm">Pagamento</div><div class="st">idle</div>
+        </div>
+        <div class="evt-col">
+          <span class="evt-label" id="ce1">PaymentProcessed</span>
+          <span class="arrow" id="ca1">→</span>
+        </div>
+        <div class="node" data-s="idle" id="cn2">
+          <div class="ix">SERVICE 03</div><div class="nm">Estoque</div><div class="st">idle</div>
+        </div>
+        <div class="evt-col">
+          <span class="evt-label" id="ce2">StockReserved</span>
+          <span class="arrow" id="ca2">→</span>
+        </div>
+        <div class="node" data-s="idle" id="cn3">
+          <div class="ix">SERVICE 04</div><div class="nm">Envio</div><div class="st">idle</div>
+        </div>
+      </div>
+
+      <div class="banner" id="cho-banner">aguardando início · status do pedido: PENDING</div>
+
+      <div class="console">
+        <div class="console-bar">
+          <i class="dot" style="background:#e5563f"></i>
+          <i class="dot" style="background:#f0a830"></i>
+          <i class="dot" style="background:#4fb37d"></i>
+          <span>event-bus.log</span>
+        </div>
+        <div class="log" id="cho-log"><div class="ln idle">$ event bus pronto…</div></div>
+      </div>
+    </div>
+
+    <!-- ---- code ---- -->
+    <h3>Os eventos como contratos entre serviços</h3>
+    <p>Cada serviço só conhece os eventos que produz ou consome — nunca chama o outro diretamente. Com Spring, <code>ApplicationEventPublisher</code> cobre o caso síncrono em processo; para sistemas distribuídos, troca-se por Kafka ou SQS mantendo a mesma semântica.</p>
+    <div class="codecap">// Events.kt — contratos de domínio (sem acoplamento entre serviços)</div>
+    <pre><code class="language-kotlin">data class OrderCreatedEvent(val orderId: String, val customerId: String, val amount: BigDecimal)
+data class PaymentProcessedEvent(val orderId: String, val paymentId: String)
+data class StockReservationFailedEvent(val orderId: String, val reason: String)
+data class StockReservedEvent(val orderId: String, val reservationId: String)</code></pre>
+
+    <div class="codecap">// PaymentEventHandler.kt — reage e compensa de forma autônoma</div>
+    <pre><code class="language-kotlin">@Component
+class PaymentEventHandler(
+    private val payments: PaymentService,
+    private val events: ApplicationEventPublisher
+) {
+    @EventListener
+    fun onOrderCreated(e: OrderCreatedEvent) {
+        val paymentId = payments.charge(e.customerId, e.amount)
+        events.publishEvent(PaymentProcessedEvent(e.orderId, paymentId))
+    }
+
+    @EventListener                              // compensação autônoma
+    fun onStockFailed(e: StockReservationFailedEvent) {
+        payments.refund(e.orderId)              // estorno idempotente
+    }
+}</code></pre>
+
+    <div class="codecap">// InventoryEventHandler.kt — publica falha em vez de lançar exceção</div>
+    <pre><code class="language-kotlin">@Component
+class InventoryEventHandler(
+    private val inventory: InventoryService,
+    private val events: ApplicationEventPublisher
+) {
+    @EventListener
+    fun onPaymentProcessed(e: PaymentProcessedEvent) {
+        runCatching { inventory.reserve(e.orderId) }
+            .onSuccess { id -> events.publishEvent(StockReservedEvent(e.orderId, id)) }
+            .onFailure { ex -> events.publishEvent(StockReservationFailedEvent(e.orderId, ex.message ?: "sem estoque")) }
+    }
+}</code></pre>
+  </section>
+
+  <section class="reveal">
+    <span class="skip">07 — Checklist de produção</span>
     <h2>O que separa o exemplo do real</h2>
     <div class="checks">
       <div class="check"><div class="n">▪ 01</div><h4>Idempotência</h4><p>A mesma mensagem pode chegar duas vezes na fila. Cada handler — e cada compensação — precisa detectar reprocessamento e não duplicar o efeito.</p></div>
@@ -475,6 +591,122 @@ class PaymentStep(private val payments: PaymentService) : SagaStep&lt;OrderSagaC
   btnOk.addEventListener('click',()=>runSaga('ok'));
   btnFail.addEventListener('click',()=>runSaga('fail'));
   btnReset.addEventListener('click',()=>{ if(!running) reset(true); });
+
+  // ---- choreography simulator ----
+  const choLog = document.getElementById('cho-log');
+  const choBanner = document.getElementById('cho-banner');
+  const choHint = document.getElementById('cho-hint');
+  const choBtnOk = document.getElementById('cho-ok');
+  const choBtnFail = document.getElementById('cho-fail');
+  const choBtnReset = document.getElementById('cho-reset');
+  let choRunning = false;
+
+  const choNodes = ['cn0','cn1','cn2','cn3'];
+  const choNodeNames = ['OrderService','PaymentEventHandler','InventoryEventHandler','ShippingEventHandler'];
+  const choEvents = [
+    { id:'ce0', ok:'OrderCreated', fail:null },
+    { id:'ce1', ok:'PaymentProcessed', fail:'StockReservationFailed' },
+    { id:'ce2', ok:'StockReserved', fail:null },
+  ];
+
+  function choSetState(i, s){
+    const el = document.getElementById(choNodes[i]);
+    el.dataset.s = s;
+    el.querySelector('.st').textContent = s;
+  }
+  function choSetEvt(i, cls, label){
+    const el = document.getElementById(choEvents[i].id);
+    el.className = 'evt-label' + (cls ? ' '+cls : '');
+    if(label) el.textContent = label;
+  }
+  function choArrowBack(i, on){
+    const a = document.getElementById('ca'+i);
+    if(a) a.classList.toggle('back', on);
+  }
+  function choLogLine(cls, txt){
+    const now = new Date().toLocaleTimeString('pt-BR',{hour12:false});
+    const div = document.createElement('div');
+    div.className = 'ln';
+    div.innerHTML = `<span class="t">${now}</span> <span class="${cls}">${txt}</span>`;
+    choLog.appendChild(div); choLog.scrollTop = choLog.scrollHeight;
+  }
+  function choReset(full=true){
+    choNodes.forEach((_,i) => choSetState(i,'idle'));
+    choEvents.forEach((ev,i) => { choSetEvt(i,'',ev.ok); choArrowBack(i,false); });
+    choBanner.className='banner';
+    choBanner.textContent='aguardando início · status do pedido: PENDING';
+    if(full){ choLog.innerHTML='<div class="ln idle">$ event bus pronto…</div>'; choHint.textContent='pronto.'; }
+  }
+
+  async function runCho(scenario){
+    if(choRunning) return;
+    choRunning=true; choBtnOk.disabled=choBtnFail.disabled=true; choHint.textContent='executando…';
+    choReset(false); choLog.innerHTML='';
+
+    const failAt = scenario==='fail' ? 2 : -1; // falha no Estoque (índice do node)
+    const choOkLogs = [
+      ()=>`📋 OrderCreated publicado · orderId=${rid()}`,
+      ()=>`💳 Cobrança confirmada · paymentId=${rid()} → publica PaymentProcessed`,
+      ()=>`📦 Reserva criada · reservationId=${rid()} → publica StockReserved`,
+      ()=>`🚚 Envio agendado · shipmentId=${rid()}`,
+    ];
+    const choFailLog = ()=>`✖ Estoque insuficiente → publica StockReservationFailed`;
+
+    choLogLine('sys',`➡️  OrderService.placeOrder() iniciado · status PENDING`);
+    await sleep(400);
+
+    // passo 0: Order (sem evento anterior)
+    choSetState(0,'running');
+    await sleep(700);
+    choSetState(0,'done');
+    choLogLine('ok', choOkLogs[0]());
+    choSetEvt(0,'active', choEvents[0].ok);
+    await sleep(500);
+
+    // passos 1..3: reage ao evento anterior
+    for(let i=1; i<=3; i++){
+      choSetState(i,'running');
+      choLogLine('run', `${choNodeNames[i]}.on${choEvents[i-1].ok}()`);
+      await sleep(950);
+
+      if(i === failAt){ // estoque falha
+        choSetState(i,'failed');
+        choLogLine('err', choFailLog());
+        choSetEvt(i-1,'fail', choEvents[i-1].fail);
+        await sleep(600);
+        // compensação: evento de falha volta ao pagamento
+        choLogLine('sys','❌ StockReservationFailed → PaymentEventHandler.onStockFailed()');
+        await sleep(500);
+        choArrowBack(1,true);
+        choSetState(1,'compensating');
+        choLogLine('comp','💰 Estornando pagamento (compensação autônoma)');
+        await sleep(950);
+        choSetState(1,'compensated');
+        choSetEvt(1,'comp-ev','PaymentRefunded');
+        choBanner.className='banner cancelled';
+        choBanner.textContent='↩ saga compensada · status do pedido: CANCELLED';
+        choLogLine('sys','↩️  Compensação concluída. Pedido marcado como CANCELLED.');
+        choHint.textContent='compensado.';
+        choRunning=false; choBtnOk.disabled=choBtnFail.disabled=false;
+        return;
+      }
+
+      choSetState(i,'done');
+      choLogLine('ok', choOkLogs[i]());
+      if(i < 3){ choSetEvt(i,'active', choEvents[i].ok); }
+      await sleep(300);
+    }
+
+    choBanner.className='banner completed';
+    choBanner.textContent='✓ saga concluída · status do pedido: COMPLETED';
+    choLogLine('sys','✅ Todos os eventos processados. Pedido marcado como COMPLETED.');
+    choHint.textContent='concluído.';
+    choRunning=false; choBtnOk.disabled=choBtnFail.disabled=false;
+  }
+
+  choBtnOk.addEventListener('click',()=>runCho('ok'));
+  choBtnFail.addEventListener('click',()=>runCho('fail'));
+  choBtnReset.addEventListener('click',()=>{ if(!choRunning) choReset(true); });
 </script>
 </body>
 </html>
